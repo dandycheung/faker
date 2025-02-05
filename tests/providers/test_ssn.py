@@ -34,6 +34,7 @@ from faker.providers.ssn.pl_PL import checksum as pl_checksum
 from faker.providers.ssn.pt_BR import checksum as pt_checksum
 from faker.providers.ssn.ro_RO import ssn_checksum as ro_ssn_checksum
 from faker.providers.ssn.ro_RO import vat_checksum as ro_vat_checksum
+from faker.providers.ssn.uk_UA import Provider as uk_Provider
 from faker.providers.ssn.zh_TW import checksum as tw_checksum
 from faker.utils.checksums import luhn_checksum
 
@@ -199,6 +200,51 @@ class TestDeAT(unittest.TestCase):
     def test_vat_id(self):
         for _ in range(100):
             assert re.search(r"^ATU\d{8}$", self.fake.vat_id())
+
+    def test_ssn(self):
+        for _ in range(100):
+            ssn: str = self.fake.ssn()
+            assert len(ssn) == 10
+            assert len(self.fake.ssn(self.fake.date_of_birth())) == 10
+
+    def test_ssn_checkdigit(self):
+        for _ in range(100):
+            ssn: str = self.fake.ssn()
+            ssn_digits: list[int] = [int(char) for char in ssn[:3] + ssn[4:]]
+            factors: list[int] = [3, 7, 9, 5, 8, 4, 2, 1, 6]
+            sum: int = 0
+            for index, digit in enumerate(ssn_digits):
+                sum += digit * factors[index]
+            assert sum % 11 == int(ssn[3])
+
+
+class TestDeDe(unittest.TestCase):
+    def setUp(self):
+        self.fake = Faker("de_DE")
+        self.rvnr_pattern: Pattern = re.compile(r"\d{8}[A-Z]\d{3}")
+        self.kvnr_pattern: Pattern = re.compile(r"[A-Z]\d{19}")
+        Faker.seed(0)
+
+    def test_vat_id(self):
+        for _ in range(100):
+            assert re.search(r"^DE\d{9}$", self.fake.vat_id())
+
+    def test_rvnr(self):
+        for _ in range(100):
+            rvnr = self.fake.rvnr()
+            assert self.rvnr_pattern.fullmatch(rvnr)
+
+    def test_rvnr_birthdate(self):
+        for _ in range(100):
+            birthdate: datetime.date = self.fake.date_object()
+            rvnr = self.fake.rvnr(birthdate)
+            assert self.rvnr_pattern.fullmatch(rvnr)
+            assert rvnr[2:8] == birthdate.strftime("%d%m%y")
+
+    def test_kvnr(self):
+        for _ in range(100):
+            kvnr = self.fake.kvnr()
+            assert self.kvnr_pattern.fullmatch(kvnr)
 
 
 class TestElCY(unittest.TestCase):
@@ -623,6 +669,16 @@ class TestEsES(unittest.TestCase):
     def test_doi(self):
         assert len(self.fake.doi()) == 9
 
+    def test_nuss(self):
+        for _ in range(50):
+            nuss = self.fake.nuss()
+            assert isinstance(nuss, str)
+            assert 12 == len(nuss)
+        for _ in range(50):
+            nuss = self.fake.nuss(company=True)
+            assert isinstance(nuss, str)
+            assert 11 == len(nuss)
+
 
 class TestEsCA(TestEsES):
     def setUp(self):
@@ -792,6 +848,19 @@ class TestFiFI(unittest.TestCase):
     def test_vat_id(self):
         for _ in range(100):
             assert re.search(r"^FI\d{8}$", self.fake.vat_id())
+
+    @freezegun.freeze_time("2023-10-23")
+    def test_ssn_without_age_range(self):
+        current_year = 2023
+        age = current_year - 1995
+        ssn = self.fake.ssn(min_age=age, max_age=age, artificial=True)
+        assert "95-" in ssn
+        age = current_year - 2013
+        ssn = self.fake.ssn(min_age=age, max_age=age, artificial=True)
+        assert "13A" in ssn
+        age = current_year - 1898
+        ssn = self.fake.ssn(min_age=age, max_age=age, artificial=True)
+        assert "98+" in ssn
 
 
 class TestFrFR(unittest.TestCase):
@@ -1206,6 +1275,33 @@ class TestZhCN(unittest.TestCase):
         ssn = self.fake.ssn(gender="M")
         assert int(ssn[16]) % 2 == 1
 
+    def test_zh_CN_ssn_invalid_area_code_passed(self):
+        ssn = self.fake.ssn(area_code=12)
+        assert int(ssn[0:6]) > 0
+
+        ssn = self.fake.ssn(area_code={})
+        assert int(ssn[0:6]) > 0
+
+        ssn = self.fake.ssn(area_code=[])
+        assert int(ssn[0:6]) > 0
+
+        ssn = self.fake.ssn(area_code=None)
+        assert int(ssn[0:6]) > 0
+
+        ssn = self.fake.ssn()
+        assert int(ssn[0:6]) > 0
+
+    def test_zh_CN_ssn_area_code_passed(self):
+        #
+        ssn = self.fake.ssn(area_code="654225")
+        assert int(ssn[0:6]) == 654225
+
+        ssn = self.fake.ssn(area_code="820000")
+        assert int(ssn[0:6]) == 820000
+
+        ssn = self.fake.ssn(area_code="830000")
+        assert int(ssn[0:6]) == 830000
+
 
 class TestRoRO(unittest.TestCase):
     """Tests SSN in the ro_RO locale"""
@@ -1314,3 +1410,30 @@ class TestZhTW(unittest.TestCase):
     def test_checksum(self):
         for sample in self.samples:
             assert tw_checksum(sample) % 10 == 0
+
+
+class TestUkUA(unittest.TestCase):
+    def setUp(self):
+        self.fake = Faker("uk_Ua")
+        Faker.seed(0)
+        self.provider = uk_Provider
+
+    def test_ssn_len(self):
+        assert len(self.fake.ssn()) == 10
+
+    def test_start_ssn(self):
+        assert self.fake.ssn("21-06-1994")[:5] == "34505"
+
+    def test_ssn_gender(self):
+        m = self.fake.ssn(gender="M")
+        w = self.fake.ssn(gender="F")
+        assert int(m[8]) % 2 != 0, "Must be odd for men"
+        assert int(w[8]) % 2 == 0, "Must be even for women"
+
+    def test_incorrect_birthday(self):
+        with pytest.raises(ValueError):
+            self.fake.ssn(birthday="1994-06-01")
+
+    def test_incorrect_gender(self):
+        with pytest.raises(ValueError):
+            self.fake.ssn(gender="f")

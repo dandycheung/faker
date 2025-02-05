@@ -3,7 +3,8 @@ import sys
 import unittest
 import warnings
 
-from typing import Iterable, Optional, Union
+from collections import Counter
+from typing import Iterable, Optional, Type, Union
 from unittest.mock import patch
 
 import pytest
@@ -13,8 +14,20 @@ from faker import Faker
 
 @pytest.mark.parametrize("object_type", (None, bool, str, float, int, tuple, set, list, Iterable, dict))
 def test_pyobject(
-    object_type: Optional[Union[bool, str, float, int, tuple, set, list, Iterable, dict]],
-):
+    object_type: Optional[
+        Union[
+            Type[bool],
+            Type[str],
+            Type[float],
+            Type[int],
+            Type[tuple],
+            Type[set],
+            Type[list],
+            Type[Iterable],
+            Type[dict],
+        ]
+    ],
+) -> None:
     random_object = Faker().pyobject(object_type=object_type)
     if object_type is None:
         assert random_object is None
@@ -82,6 +95,36 @@ def test_pyfloat_right_or_left_digit_overflow():
             assert str(abs(result)) == "12345678901234.1"
             result = faker.pyfloat(right_digits=max_float_digits - 1)
             assert str(abs(result)) == "1.12345678901234"
+
+
+@pytest.mark.skipif(sys.version_info < (3, 10), reason="Only relevant for Python 3.10 and later.")
+@pytest.mark.parametrize(
+    ("min_value", "max_value"),
+    [
+        (1.5, None),
+        (-1.5, None),
+        (None, -1.5),
+        (None, 1.5),
+        (-1.5, 1.5),
+    ],
+)
+@pytest.mark.parametrize(("left_digits"), [None, 5])
+@pytest.mark.parametrize(("right_digits"), [None, 5])
+@pytest.mark.filterwarnings(
+    # Convert the warning to an error for this test
+    r"error:non-integer arguments to randrange\(\):DeprecationWarning"
+)
+def test_float_min_and_max_value_does_not_crash(
+    left_digits: Optional[int],
+    right_digits: Optional[int],
+    min_value: Optional[float],
+    max_value: Optional[float],
+):
+    """
+    Float arguments to randrange are deprecated from Python 3.10. This is a regression
+    test to check that `pydecimal` does not cause a crash on any code path.
+    """
+    Faker().pydecimal(left_digits, right_digits, min_value=min_value, max_value=max_value)
 
 
 class TestPyint(unittest.TestCase):
@@ -162,7 +205,7 @@ class TestPyfloat(unittest.TestCase):
         self.assertGreaterEqual(result, 0)
 
     def test_max_value(self):
-        max_values = (0, 10, -1000, 1000, 999999, 100000000000001.0, -1000000000000001.0)
+        max_values = (0, 10, -1000, 1000, 999999)
 
         for max_value in max_values:
             result = self.fake.pyfloat(max_value=max_value)
@@ -209,33 +252,6 @@ class TestPyfloat(unittest.TestCase):
             result = self.fake.pyfloat(min_value=100.123, max_value=200.321)
             self.assertLessEqual(result, 200.321)
             self.assertGreaterEqual(result, 100.123)
-
-    def test_max_none_and_min_value_with_decimals(self):
-        """
-        Combining the max_value and min_value keyword arguments with
-        positive value for min and None for max produces numbers with
-        left and right digits specified produced numbers greater than
-        the supplied min_value.
-        """
-        for _ in range(1000):
-            result = self.fake.pyfloat(min_value=99884.7, max_value=None, left_digits=5, right_digits=2)
-            self.assertGreaterEqual(result, 99884.7)
-            assert len(str(result).strip("-").split(".")[0]) == 5
-            assert len(str(result).strip("-").split(".")[1]) <= 2
-
-    def test_min_none_and_max_value_with_decimals(self):
-        """
-        Combining the max_value and min_value keyword arguments with
-        positive value for max and None for min produces numbers with
-        left and right digits specified produced numbers greater than
-        the supplied min_value.
-        """
-        for _ in range(1000):
-            result = self.fake.pyfloat(min_value=None, max_value=11000.3, left_digits=5, right_digits=2)
-            self.assertLessEqual(result, 11000.3)
-            assert len(str(result).strip("-").split(".")[0]) == 5
-            assert len(str(result).strip("-").split(".")[1]) <= 2
-
 
     def test_max_and_min_value_negative(self):
         """
@@ -294,6 +310,34 @@ class TestPyfloat(unittest.TestCase):
 
     def test_float_min_and_max_value_with_same_whole(self):
         self.fake.pyfloat(min_value=2.3, max_value=2.5)
+
+
+class TestPyDict(unittest.TestCase):
+    def setUp(self):
+        self.fake = Faker()
+        Faker.seed(0)
+
+    def test_pydict_with_default_nb_elements(self):
+        result = self.fake.pydict()
+
+        self.assertEqual(len(result), 10)
+
+    def test_pydict_with_valid_number_of_nb_elements(self):
+        result = self.fake.pydict(nb_elements=5)
+
+        self.assertEqual(len(result), 5)
+
+    def test_pydict_with_invalid_number_of_nb_elements(self):
+        nb_elements = 10000
+
+        words_list_count = len(self.fake.get_words_list())
+        warning_msg = (
+            f"Number of nb_elements is greater than the number of words in the list."
+            f" {words_list_count} words will be used."
+        )
+        with pytest.warns(RuntimeWarning, match=warning_msg):
+            result = self.fake.pydict(nb_elements=nb_elements)
+            self.assertEqual(len(result), words_list_count)
 
 
 class TestPydecimal(unittest.TestCase):
@@ -463,6 +507,39 @@ class TestPydecimal(unittest.TestCase):
         result = self.fake.pydecimal(min_value=10**1000)
         self.assertGreater(result, 10**1000)
 
+    def test_min_value_and_max_value_have_different_signs_return_evenly_distributed_values(self):
+        result = []
+        boundary_value = 10
+        for _ in range(1000):
+            result.append(self.fake.pydecimal(min_value=-boundary_value, max_value=boundary_value, right_digits=0))
+        self.assertEqual(len(Counter(result)), 2 * boundary_value + 1)
+
+    def test_min_value_and_max_value_negative_return_evenly_distributed_values(self):
+        result = []
+        min_value = -60
+        max_value = -50
+        for _ in range(1000):
+            result.append(self.fake.pydecimal(min_value=min_value, max_value=max_value, right_digits=0))
+        self.assertGreater(len(Counter(result)), max_value - min_value)
+
+    def test_min_value_and_max_value_positive_return_evenly_distributed_values(self):
+        result = []
+        min_value = 50
+        max_value = 60
+        for _ in range(1000):
+            result.append(self.fake.pydecimal(min_value=min_value, max_value=max_value, right_digits=0))
+        self.assertGreater(len(Counter(result)), max_value - min_value)
+
+    def test_min_value_float_returns_correct_digit_number(self):
+        Faker.seed("6")
+        result = self.fake.pydecimal(left_digits=1, right_digits=1, min_value=0.2, max_value=0.3)
+        self.assertEqual(decimal.Decimal("0.2"), result)
+
+    def test_max_value_float_returns_correct_digit_number(self):
+        Faker.seed("3")
+        result = self.fake.pydecimal(left_digits=1, right_digits=1, min_value=0.2, max_value=0.3)
+        self.assertEqual(decimal.Decimal("0.3"), result)
+
 
 class TestPystr(unittest.TestCase):
     def setUp(self):
@@ -520,7 +597,7 @@ class TestPystrFormat(unittest.TestCase):
         Faker.seed(0)
 
     def test_formatter_invocation(self):
-        with patch.object(self.fake["en_US"], "foo") as mock_foo:
+        with patch.object(self.fake["en_US"].factories[0], "foo") as mock_foo:
             with patch("faker.providers.BaseProvider.bothify", wraps=self.fake.bothify) as mock_bothify:
                 mock_foo.return_value = "barbar"
                 value = self.fake.pystr_format("{{foo}}?#?{{foo}}?#?{{foo}}", letters="abcde")

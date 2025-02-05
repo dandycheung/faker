@@ -80,6 +80,40 @@ class TestEnUS(unittest.TestCase):
         assert Decimal(loc[1])
 
 
+class TestSkSk(unittest.TestCase):
+    def setUp(self):
+        self.fake = Faker("sk_SK")
+        Faker.seed(0)
+
+    def test_location_on_land(self):
+        loc = self.fake.location_on_land()
+        assert isinstance(loc, tuple)
+        assert len(loc) == 5
+        assert Decimal(loc[0])  # Should be able to cast first two elements of tuple to Decimal
+        assert Decimal(loc[1])
+        assert isinstance(loc[2], str)  # Place is a string
+        assert isinstance(loc[3], str)  # Country code is a string
+        assert len(loc[3]) == 2  # Country code is two letters
+        assert isinstance(loc[4], str)  # Timezone is a string
+
+
+class TestCsCz(unittest.TestCase):
+    def setUp(self):
+        self.fake = Faker("cs_CZ")
+        Faker.seed(0)
+
+    def test_location_on_land(self):
+        loc = self.fake.location_on_land()
+        assert isinstance(loc, tuple)
+        assert len(loc) == 5
+        assert Decimal(loc[0])  # Should be able to cast first two elements of tuple to Decimal
+        assert Decimal(loc[1])
+        assert isinstance(loc[2], str)  # Place is a string
+        assert isinstance(loc[3], str)  # Country code is a string
+        assert len(loc[3]) == 2  # Country code is two letters
+        assert isinstance(loc[4], str)  # Timezone is a string
+
+
 class TestDeAT(unittest.TestCase):
     """Tests in addresses in the de_AT locale"""
 
@@ -94,6 +128,23 @@ class TestDeAT(unittest.TestCase):
     def test_local_longitude(self):
         local_longitude = self.fake.local_longitude()
         assert re.match(r"1[1-5]\.\d+", str(local_longitude))
+
+
+class TestPlPl(unittest.TestCase):
+    def setUp(self):
+        self.fake = Faker("pl_PL")
+        Faker.seed(0)
+
+    def test_location_on_land(self):
+        loc = self.fake.location_on_land()
+        assert isinstance(loc, tuple)
+        assert len(loc) == 5
+        assert Decimal(loc[0])  # Should be able to cast first two elements of tuple to Decimal
+        assert Decimal(loc[1])
+        assert isinstance(loc[2], str)  # Place is a string
+        assert isinstance(loc[3], str)  # Country code is a string
+        assert len(loc[3]) == 2  # Country code is two letters
+        assert isinstance(loc[4], str)  # Timezone is a string
 
 
 class TestPtPT(unittest.TestCase):

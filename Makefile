@@ -13,7 +13,10 @@ black:
 isort:
 	isort --atomic .
 
-lint: isort black mypy flake8
+generate-stubs: 
+	python3.10 generate_stubs.py
+
+lint: generate-stubs isort black mypy flake8
 
 release:
 	check-manifest

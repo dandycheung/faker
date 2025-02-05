@@ -3,12 +3,14 @@ import re
 from typing import Pattern
 
 from faker.providers.automotive import calculate_vin_str_weight
+from faker.providers.automotive.de_AT import Provider as DeAtAutomotiveProvider
 from faker.providers.automotive.de_DE import Provider as DeDeAutomotiveProvider
 from faker.providers.automotive.es_ES import Provider as EsEsAutomotiveProvider
 from faker.providers.automotive.ro_RO import Provider as RoRoAutomotiveProvider
 from faker.providers.automotive.ru_RU import Provider as RuRuAutomotiveProvider
 from faker.providers.automotive.sk_SK import Provider as SkSkAutomotiveProvider
 from faker.providers.automotive.tr_TR import Provider as TrTrAutomotiveProvider
+from faker.providers.automotive.uk_UA import Provider as UkUaAutomotiveProvider
 
 
 class _SimpleAutomotiveTestMixin:
@@ -81,6 +83,16 @@ class TestHuHu(_SimpleAutomotiveTestMixin):
     """Test hu_HU automotive provider methods"""
 
     license_plate_pattern: Pattern = re.compile(r"[A-Z]{3}-\d{3}")
+
+
+class TestDeAt(_SimpleAutomotiveTestMixin):
+    """Test de_AT automotive provider methods"""
+
+    license_plate_pattern: Pattern = re.compile(r"(?P<prefix>[A-Z]{1,2})-[1-9]{1}[0-9]{0,4} [A-Z]{1,3}")
+
+    def perform_extra_checks(self, license_plate, match):
+        assert match.group("prefix") in DeAtAutomotiveProvider.license_plate_prefix
+        assert len(license_plate) in (8, 9)
 
 
 class TestDeDe(_SimpleAutomotiveTestMixin):
@@ -335,7 +347,9 @@ class TestNlBe(_SimpleAutomotiveTestMixin):
 class TestZhCn(_SimpleAutomotiveTestMixin):
     """Test zh_CN automotive provider methods"""
 
-    license_plate_pattern: Pattern = re.compile(r"^[京津冀晋蒙辽吉黑沪苏浙皖闽赣鲁豫鄂湘粤桂琼川贵云渝藏陕甘青宁新]{1}[A-Z]{1}-[A-Z0-9]{5}")
+    license_plate_pattern: Pattern = re.compile(
+        r"^[京津冀晋蒙辽吉黑沪苏浙皖闽赣鲁豫鄂湘粤桂琼川贵云渝藏陕甘青宁新]{1}[A-Z]{1}-[A-Z0-9]{5}"
+    )
 
 
 class TestZhTw(_SimpleAutomotiveTestMixin):
@@ -347,3 +361,35 @@ class TestZhTw(_SimpleAutomotiveTestMixin):
         r"([A-Z]{3}-\d{4})|"  # new format since 2014
         r"([A-Z]{3}-\d{3})",  # commercial cars since 2012
     )
+
+
+class TestUkUa(_SimpleAutomotiveTestMixin):
+    license_plate_pattern: Pattern = re.compile(r"[A-Z]{2}\d{4}[A-Z]{2}")
+
+    def perform_extra_checks(self, license_plate, match):
+        assert license_plate[-2:] in UkUaAutomotiveProvider.license_plate_suffix
+
+    def test_temporary_plate(self, faker, num_samples):
+        pattern = r"\d{2} [A-Z]{2}\d{4}"
+
+        for _ in range(num_samples):
+            temporary = faker.license_plate(temporary_plate=True)
+            match = re.search(pattern, temporary)
+            assert match is not None
+
+    def test_diplomatic_plate(self, faker, num_samples):
+        pattern = r"(CDP \d{3})|(DP|S) \d{3} \d{3}"
+
+        for _ in range(num_samples):
+            temporary = faker.diplomatic_license_plate()
+            match = re.search(pattern, temporary)
+            assert match is not None
+
+    def test_prefix(self, faker):
+        for _ in range(10):
+            temporary = faker.plate_letter_prefix(region_name="Lviv")
+            assert len(temporary) == 2
+            assert temporary in UkUaAutomotiveProvider.license_region_data.get("Lviv")[0]
+
+    def test_region_code(self, faker):
+        assert "14" == faker.plate_region_code(region_name="Lviv")
